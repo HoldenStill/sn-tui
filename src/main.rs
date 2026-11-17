@@ -70,11 +70,11 @@ fn main() -> Result<()> {
             bail!("upload command will be wired in Milestone 5");
         }
         None => {
-            let ws = cli.workspace.unwrap_or(loaded.config.workspace_dir);
-            println!(
-                "TUI workspace {} ready (launching interactive TUI will be wired in Milestone 4)",
-                ws.display()
-            );
+            let mut cfg = loaded.config;
+            if let Some(ws) = cli.workspace {
+                cfg.workspace_dir = ws;
+            }
+            sn_tui::tui::run_tui(cfg, loaded.warnings)?;
         }
     }
 
