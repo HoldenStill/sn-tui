@@ -1,14 +1,15 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use serde::Serialize;
 
 use sn_tui::cli::{Cli, Commands};
-use sn_tui::config::{default_config_path, load_config, write_sample_config};
-use sn_tui::export::export_path;
+use sn_tui::config::{default_cache_dir, default_config_path, load_config, write_sample_config};
+use sn_tui::export::{ExportFormat, export_path};
 use sn_tui::note::{Notebook, extract_notebook_text, parse_notebook_file};
 use sn_tui::pdf::{PdfInfo, inspect_pdf};
+use sn_tui::sync::{pull_sync, resolve_profile, upload_file};
 
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -63,11 +64,67 @@ fn main() -> Result<()> {
                 println!("  -> {}", out.display());
             }
         }
-        Some(Commands::Sync { .. }) => {
-            bail!("sync command will be wired in Milestone 5");
+        Some(Commands::Sync {
+            profile,
+            auto_export,
+            dry_run,
+        }) => {
+            let (name, prof) = resolve_profile(&loaded.config, profile.as_deref())?;
+            let cache_dir = default_cache_dir();
+            let report = pull_sync(
+                &name,
+                prof,
+                &loaded.config.workspace_dir,
+                &cache_dir,
+                dry_run,
+                |msg| println!("{msg}"),
+            )?;
+            println!(
+                "Sync `{name}` summary: {} pulled, {} skipped (up-to-date), {} failed",
+                report.downloaded, report.skipped, report.failed
+            );
+
+            if auto_export && !dry_run && !report.downloaded_paths.is_empty() {
+                let fmt = loaded
+                    .config
+                    .auto_export_format
+                    .as_deref()
+                    .and_then(|s| ExportFormat::from_str(s, true).ok())
+                    .unwrap_or(ExportFormat::PdfRaster);
+                for path in &report.downloaded_paths {
+                    if path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .is_some_and(|e| e.eq_ignore_ascii_case("note"))
+                    {
+                        let rel = path
+                            .strip_prefix(&loaded.config.workspace_dir)
+                            .unwrap_or(path);
+                        let out = loaded
+                            .config
+                            .export_dir
+                            .join(rel)
+                            .with_extension(fmt.default_extension());
+                        if let Err(e) = export_path(path, &out, fmt, loaded.config.max_workers) {
+                            eprintln!("auto-export failed for {}: {e:#}", path.display());
+                        } else {
+                            println!("  auto-exported -> {}", out.display());
+                        }
+                    }
+                }
+            }
         }
-        Some(Commands::Upload { .. }) => {
-            bail!("upload command will be wired in Milestone 5");
+        Some(Commands::Upload {
+            file,
+            dest,
+            profile,
+        }) => {
+            let (name, prof) = resolve_profile(&loaded.config, profile.as_deref())?;
+            upload_file(prof, &file, &dest)?;
+            println!(
+                "Uploaded {} to `{dest}` via profile `{name}`",
+                file.display()
+            );
         }
         None => {
             let mut cfg = loaded.config;
