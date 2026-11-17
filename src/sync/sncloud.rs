@@ -21,6 +21,7 @@ const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) sn-tui/0.1";
 
 pub struct SnCloudClient {
     agent: Agent,
+    kind: ProfileKind,
     base_url: String,
     access_token: Option<String>,
     bearer_token: Option<String>,
@@ -167,6 +168,7 @@ impl SnCloudClient {
 
         let mut client = Self {
             agent,
+            kind: profile.kind,
             base_url,
             access_token: None,
             bearer_token: None,
@@ -205,13 +207,11 @@ impl SnCloudClient {
     }
 
     fn resolve_download_url(&self, raw_url: &str) -> String {
-        if raw_url.starts_with("http://") || raw_url.starts_with("https://") {
-            raw_url.to_string()
-        } else {
-            let base = self.base_url.trim_end_matches('/');
-            let rel = raw_url.trim_start_matches('/');
-            format!("{base}/{rel}")
-        }
+        let is_private = matches!(
+            self.kind,
+            ProfileKind::PrivateCloud | ProfileKind::OpenPrivateCloud
+        );
+        rewrite_endpoint_url(&self.base_url, raw_url, is_private)
     }
 
     fn post_json<B: Serialize, R: for<'de> Deserialize<'de>>(
@@ -532,4 +532,96 @@ fn hex_encode(bytes: &[u8]) -> String {
         let _ = write!(&mut out, "{b:02x}");
     }
     out
+}
+
+/// Extracts `(origin, host_without_port, path_and_query)` from an `http(s)://...` URL.
+fn split_url(url: &str) -> Option<(&str, &str, &str)> {
+    let scheme_end = url.find("://")?;
+    let after_scheme = &url[scheme_end + 3..];
+    let (authority, rest) = match after_scheme.find('/') {
+        Some(idx) => (&after_scheme[..idx], &after_scheme[idx..]),
+        None => (after_scheme, "/"),
+    };
+    let origin = &url[..scheme_end + 3 + authority.len()];
+    let host = if authority.starts_with('[') {
+        authority
+            .find(']')
+            .map(|end| &authority[..=end])
+            .unwrap_or(authority)
+    } else {
+        authority.split(':').next().unwrap_or(authority)
+    };
+    Some((origin, host, rest))
+}
+
+/// Rewrites internal/reverse-proxied URLs returned by self-hosted Private Cloud servers
+/// (e.g. `https://sn.example.com:8080/api/oss/download?...` or `http://127.0.0.1:8080/...`)
+/// to use the user's configured `base_url` origin, while leaving external S3/OSS CDN URLs intact.
+pub fn rewrite_endpoint_url(base_url: &str, raw_url: &str, is_private_cloud: bool) -> String {
+    let Some((base_origin, base_host, _)) = split_url(base_url) else {
+        return raw_url.to_string();
+    };
+
+    if !raw_url.starts_with("http://") && !raw_url.starts_with("https://") {
+        let rel = raw_url.trim_start_matches('/');
+        return format!("{base_origin}/{rel}");
+    }
+
+    if !is_private_cloud {
+        return raw_url.to_string();
+    }
+
+    let Some((raw_origin, raw_host, raw_rest)) = split_url(raw_url) else {
+        return raw_url.to_string();
+    };
+
+    if raw_origin == base_origin {
+        return raw_url.to_string();
+    }
+
+    let is_internal_api = raw_rest.starts_with("/api/");
+    let is_same_host_diff_origin = raw_host.eq_ignore_ascii_case(base_host);
+    let is_loopback_target = matches!(raw_host, "localhost" | "127.0.0.1" | "0.0.0.0" | "[::1]")
+        && !matches!(base_host, "localhost" | "127.0.0.1" | "0.0.0.0" | "[::1]");
+
+    if is_internal_api || is_same_host_diff_origin || is_loopback_target {
+        format!("{base_origin}{raw_rest}")
+    } else {
+        raw_url.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rewrite_endpoint_url;
+
+    #[test]
+    fn rewrites_reverse_proxied_private_cloud_internal_port() {
+        let out = rewrite_endpoint_url(
+            "https://sn.holdenstill.com",
+            "https://sn.holdenstill.com:8080/api/oss/download?token=abc&id=1",
+            true,
+        );
+        assert_eq!(
+            out,
+            "https://sn.holdenstill.com/api/oss/download?token=abc&id=1"
+        );
+    }
+
+    #[test]
+    fn rewrites_loopback_docker_url_for_private_cloud() {
+        let out = rewrite_endpoint_url(
+            "https://sn.example.com/api",
+            "http://127.0.0.1:19072/api/oss/upload?sig=xyz",
+            true,
+        );
+        assert_eq!(out, "https://sn.example.com/api/oss/upload?sig=xyz");
+    }
+
+    #[test]
+    fn preserves_external_s3_url_for_official_supernote_cloud() {
+        let s3 = "https://supernote-s3.s3.amazonaws.com/bucket/file.note?X-Amz-Signature=123";
+        let out = rewrite_endpoint_url("https://cloud.supernote.com", s3, false);
+        assert_eq!(out, s3);
+    }
 }

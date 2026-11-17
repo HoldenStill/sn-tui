@@ -50,6 +50,7 @@ impl Drop for TerminalGuard {
 enum SyncUiEvent {
     Log(String),
     SyncedFiles(Vec<PathBuf>),
+    SyncFinished,
 }
 
 pub fn run_tui(config: AppConfig, startup_warnings: Vec<String>) -> Result<()> {
@@ -70,6 +71,7 @@ pub fn run_tui(config: AppConfig, startup_warnings: Vec<String>) -> Result<()> {
     }
 
     let (sync_tx, sync_rx) = mpsc::channel::<SyncUiEvent>();
+    let mut sync_in_flight = false;
 
     while !app.should_quit {
         app.drain_worker_events();
@@ -116,10 +118,17 @@ pub fn run_tui(config: AppConfig, startup_warnings: Vec<String>) -> Result<()> {
             match evt {
                 SyncUiEvent::Log(msg) => app.push_log(msg),
                 SyncUiEvent::SyncedFiles(paths) => {
+                    let was_empty = app.active_path.is_none();
                     for p in paths {
                         app.tree.synced_paths.insert(p.clone());
                         app.notify_fs_change(&p);
                     }
+                    if was_empty {
+                        app.select_current_row();
+                    }
+                }
+                SyncUiEvent::SyncFinished => {
+                    sync_in_flight = false;
                 }
             }
         }
@@ -129,8 +138,13 @@ pub fn run_tui(config: AppConfig, startup_warnings: Vec<String>) -> Result<()> {
         for trigger in triggers {
             match trigger {
                 SyncTrigger::PullSync { profile } => {
+                    if sync_in_flight {
+                        app.push_log("Sync already in progress...");
+                        continue;
+                    }
                     match resolve_profile(&app.config, profile.as_deref()) {
                         Ok((name, prof)) => {
+                            sync_in_flight = true;
                             let prof = prof.clone();
                             let local_root = app.config.workspace_dir.clone();
                             let cache_dir = cache_root.clone();
@@ -164,6 +178,7 @@ pub fn run_tui(config: AppConfig, startup_warnings: Vec<String>) -> Result<()> {
                                         )));
                                     }
                                 }
+                                let _ = tx.send(SyncUiEvent::SyncFinished);
                             });
                         }
                         Err(e) => app.push_log(format!("Sync config error: {e:#}")),

@@ -127,6 +127,9 @@ where
                             .entries
                             .insert(state_key, (entry.size, entry.fingerprint.clone()));
                         report.downloaded += 1;
+                        if report.downloaded.is_multiple_of(10) {
+                            let _ = manifest.save(cache_root);
+                        }
                         report.downloaded_paths.push(local_dest);
                     }
                     Err(e) => {
@@ -165,6 +168,9 @@ where
                             .entries
                             .insert(state_key, (entry.size, entry.fingerprint.clone()));
                         report.downloaded += 1;
+                        if report.downloaded.is_multiple_of(10) {
+                            let _ = manifest.save(cache_root);
+                        }
                         report.downloaded_paths.push(local_dest);
                     }
                     Err(e) => {
