@@ -1,0 +1,11 @@
+/target
+Cargo.lock
+.cache/
+.env
+*.tmp
+exports/
+# Ignore large real-world Supernote fixtures; tiny generated test fixtures in tests/fixtures are allowed
+*.note
+*.mark
+!tests/fixtures/*.note
+!tests/fixtures/*.mark
