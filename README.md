@@ -5,6 +5,8 @@
 
 A fast, zero-GUI-toolkit Terminal User Interface (TUI) and headless CLI written in Rust for viewing, exporting, and syncing Ratta Supernote `.note` notebooks and annotated `.pdf` + `.pdf.mark` documents on Linux (built and tested for Artix Linux / Wayland / MangoWC).
 
+![sn-tui terminal screenshot](assets/screenshot.jpg)
+
 ## Highlights
 - **Zero GUI Bloat / Ultra-Lean Runtime:** No GTK, Qt, Electron, WebKit, X11, `tokio`, or `reqwest`. Uses `ratatui` + `ratatui-image` (auto-detecting Kitty, Sixel, iTerm2, or Unicode half-block fallbacks), OS threads, bounded `rayon` workers, and blocking `ureq` (`rustls`).
 - **Pure-Rust `.note` & `.mark` Engine:** Native parsing and `RATTA_RLE` (X & X2 anti-aliased) + `PNG` rendering for A5X, A6X, A6X2 (Nomad), and A5X2 (Manta), including landscape pages, selective layer toggling (`1`–`5`), and native `RECOGNTEXT` real-time recognition text extraction (no Python needed for `.txt`/`.md` or `/` OCR search).
