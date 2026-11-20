@@ -14,7 +14,7 @@ optdepends=(
 provides=('sn-tui')
 conflicts=('sn-tui')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/HoldenStill/sn-tui/releases/download/v$pkgver/sn-tui-x86_64-unknown-linux-musl.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('b313fb17239cf03068b806e43cd453bd6f626f1811bed9afe2df3258534fc516')
 
 package() {
     install -Dm755 "${srcdir}/sn-tui" "${pkgdir}/usr/bin/sn-tui"

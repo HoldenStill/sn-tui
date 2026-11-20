@@ -11,6 +11,6 @@ pkgbase = sn-tui-bin
 	provides = sn-tui
 	conflicts = sn-tui
 	source = sn-tui-bin-0.1.0.tar.gz::https://github.com/HoldenStill/sn-tui/releases/download/v0.1.0/sn-tui-x86_64-unknown-linux-musl.tar.gz
-	sha256sums = SKIP
+	sha256sums = b313fb17239cf03068b806e43cd453bd6f626f1811bed9afe2df3258534fc516
 
 pkgname = sn-tui-bin

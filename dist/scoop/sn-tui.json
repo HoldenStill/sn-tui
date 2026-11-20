@@ -5,7 +5,8 @@
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/HoldenStill/sn-tui/releases/download/v0.1.0/sn-tui-x86_64-pc-windows-msvc.zip"
+            "url": "https://github.com/HoldenStill/sn-tui/releases/download/v0.1.0/sn-tui-x86_64-pc-windows-msvc.zip",
+            "hash": "875096f311bb55835a02673bd0c9c5109d851e85517e772bfa7d183e24486462"
         }
     },
     "bin": "sn-tui.exe",
