@@ -3,7 +3,6 @@ use std::process::Command;
 
 use image::{DynamicImage, Rgba, RgbaImage};
 use sn_tui::cache::{OcrIndex, PageCache, PageCacheKey};
-use sn_tui::config::load_config;
 use sn_tui::export::{ExportFormat, export_path};
 use sn_tui::note::fixture::{
     DEFAULT_SIGNATURE, FixtureLayer, FixtureLayerData, FixtureNotebook, FixturePage,
@@ -70,16 +69,18 @@ fn exports_note_to_devicegray_raster_pdf_png_txt_md() {
     let info = inspect_pdf(&pdf_out).expect("inspect generated pdf");
     assert_eq!(info.page_count, 2);
 
-    // Verify rendered PDF page 1 actually contains the dark stroke band
-    let rendered = render_pdf_page(&pdf_out, 1, 72, false)
-        .expect("rasterize exported pdf")
-        .to_rgba8();
-    let sample_x = rendered.width() / 2;
-    let sample_y = (rendered.height() as f32 * (430.0 / 1872.0)) as u32;
-    assert!(
-        rendered.get_pixel(sample_x, sample_y)[0] < 32,
-        "expected dark stroke in exported raster PDF"
-    );
+    // Verify rendered PDF page 1 actually contains the dark stroke band (if pdftoppm available)
+    if Command::new("pdftoppm").arg("-v").output().is_ok() {
+        let rendered = render_pdf_page(&pdf_out, 1, 72, false)
+            .expect("rasterize exported pdf")
+            .to_rgba8();
+        let sample_x = rendered.width() / 2;
+        let sample_y = (rendered.height() as f32 * (430.0 / 1872.0)) as u32;
+        assert!(
+            rendered.get_pixel(sample_x, sample_y)[0] < 32,
+            "expected dark stroke in exported raster PDF"
+        );
+    }
 
     // 2. PNG sequence
     let png_out = dir.path().join("pngs").join("journal.png");
@@ -154,16 +155,18 @@ fn exports_lossless_annotated_pdf_preserving_vector_text_and_mark_overlay() {
         "expected preserved selectable text, got: {extracted:?}"
     );
 
-    // 2. Rasterized page 2 (WITHOUT companion mark) MUST contain the stamped black stroke!
-    let rendered = render_pdf_page(&out_path, 2, 72, false)
-        .expect("rasterize annotated pdf")
-        .to_rgba8();
-    let cx = rendered.width() / 2;
-    let cy = rendered.height() / 2;
-    assert!(
-        rendered.get_pixel(cx, cy)[0] < 32,
-        "expected stamped .mark stroke in lossless annotated PDF"
-    );
+    // 2. Rasterized page 2 (WITHOUT companion mark) MUST contain the stamped black stroke (if pdftoppm available)
+    if Command::new("pdftoppm").arg("-v").output().is_ok() {
+        let rendered = render_pdf_page(&out_path, 2, 72, false)
+            .expect("rasterize annotated pdf")
+            .to_rgba8();
+        let cx = rendered.width() / 2;
+        let cy = rendered.height() / 2;
+        assert!(
+            rendered.get_pixel(cx, cy)[0] < 32,
+            "expected stamped .mark stroke in lossless annotated PDF"
+        );
+    }
 }
 
 #[test]
@@ -217,6 +220,7 @@ fn disk_lru_cache_enforces_byte_budget_and_ocr_index_persists() {
 #[cfg(unix)]
 #[test]
 fn config_warns_on_permissive_plaintext_secret_permissions() {
+    use sn_tui::config::load_config;
     use std::os::unix::fs::PermissionsExt;
 
     let dir = tempfile::tempdir().expect("tempdir");

@@ -164,19 +164,21 @@ fn composites_sparse_pdf_mark_overlay_via_pdftoppm() {
     assert_eq!(info.page_count, 2);
     assert_eq!(info.annotated_pages, vec![2]);
 
-    // Render page 2 WITH mark overlay vs WITHOUT mark overlay
-    let with_mark = render_pdf_page(&pdf_path, 2, 72, true)
-        .expect("render page 2 with mark")
-        .to_rgba8();
-    let without_mark = render_pdf_page(&pdf_path, 2, 72, false)
-        .expect("render page 2 without mark")
-        .to_rgba8();
+    // Render page 2 WITH mark overlay vs WITHOUT mark overlay (if pdftoppm available)
+    if std::process::Command::new("pdftoppm").arg("-v").output().is_ok() {
+        let with_mark = render_pdf_page(&pdf_path, 2, 72, true)
+            .expect("render page 2 with mark")
+            .to_rgba8();
+        let without_mark = render_pdf_page(&pdf_path, 2, 72, false)
+            .expect("render page 2 without mark")
+            .to_rgba8();
 
-    let cx = with_mark.width() / 2;
-    let cy = with_mark.height() / 2;
-    // Middle of page 2 should be black with mark, white without mark
-    assert_eq!(with_mark.get_pixel(cx, cy)[0], 0);
-    assert_eq!(without_mark.get_pixel(cx, cy)[0], 255);
+        let cx = with_mark.width() / 2;
+        let cy = with_mark.height() / 2;
+        // Middle of page 2 should be black with mark, white without mark
+        assert_eq!(with_mark.get_pixel(cx, cy)[0], 0);
+        assert_eq!(without_mark.get_pixel(cx, cy)[0], 255);
+    }
 }
 
 #[test]
