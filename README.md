@@ -21,10 +21,38 @@ A fast, zero-GUI-toolkit Terminal User Interface (TUI) and headless CLI written 
   - Built-in `notify` filesystem watcher refreshes the TUI, invalidates caches, and optionally runs auto-exports when local files change.
 - **Bounded Resource Usage:** 128 MB LRU disk cache (`~/.cache/sn-tui/pages/`), lazy OCR index (`ocr_index.json`), and a 6-page in-memory prefetch window.
 
-## Installation (Build from Source)
+## Installation
+
+### Arch / Artix Linux (AUR)
 ```bash
+# Pre-built release binary (recommended)
+yay -S sn-tui-bin
+# or build from source via AUR helper
+paru -S sn-tui
+```
+
+### Universal Shell Installer (Linux & macOS)
+```bash
+curl -fsSL https://raw.githubusercontent.com/HoldenStill/sn-tui/main/scripts/install.sh | sh
+```
+
+### Windows (PowerShell)
+```powershell
+powershell -c "irm https://raw.githubusercontent.com/HoldenStill/sn-tui/main/scripts/install.ps1 | iex"
+```
+
+### Rust / Cargo
+```bash
+cargo install sn-tui
+# Or with fast binary installer:
+cargo binstall sn-tui
+```
+
+### Build from Source
+```bash
+git clone https://github.com/HoldenStill/sn-tui.git
+cd sn-tui
 cargo build --release
-# Optional: install into ~/.local/bin
 install -Dm755 target/release/sn-tui ~/.local/bin/sn-tui
 ```
 

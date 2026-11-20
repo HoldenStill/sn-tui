@@ -1,0 +1,24 @@
+# Maintainer: Holden Anderson <https://github.com/HoldenStill>
+pkgname=sn-tui-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Lean terminal-native Supernote .note/.mark/PDF viewer, exporter, and Cloud/WebDAV sync manager"
+arch=('x86_64')
+url="https://github.com/HoldenStill/sn-tui"
+license=('MIT')
+depends=('gcc-libs')
+optdepends=(
+    'poppler: for single-page on-demand PDF viewing and mark overlay'
+    'python-supernotelib: for vector PDF and SVG export'
+)
+provides=('sn-tui')
+conflicts=('sn-tui')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/HoldenStill/sn-tui/releases/download/v$pkgver/sn-tui-x86_64-unknown-linux-musl.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+    install -Dm755 "${srcdir}/sn-tui" "${pkgdir}/usr/bin/sn-tui"
+    if [ -f "${srcdir}/LICENSE" ]; then
+        install -Dm644 "${srcdir}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+    fi
+}
