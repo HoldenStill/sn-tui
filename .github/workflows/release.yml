@@ -28,11 +28,7 @@ jobs:
             target: x86_64-pc-windows-msvc
             use_cross: false
             archive_ext: zip
-          - os: macos-13
-            target: x86_64-apple-darwin
-            use_cross: false
-            archive_ext: tar.gz
-          - os: macos-14
+          - os: macos-latest
             target: aarch64-apple-darwin
             use_cross: false
             archive_ext: tar.gz
@@ -51,7 +47,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }} --locked
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Package asset (Unix)
         if: matrix.archive_ext == 'tar.gz'
