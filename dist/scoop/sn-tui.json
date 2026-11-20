@@ -1,0 +1,20 @@
+{
+    "version": "0.1.0",
+    "description": "Lean terminal-native Supernote .note/.mark/PDF viewer, exporter, and Cloud/WebDAV sync manager",
+    "homepage": "https://github.com/HoldenStill/sn-tui",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/HoldenStill/sn-tui/releases/download/v0.1.0/sn-tui-x86_64-pc-windows-msvc.zip"
+        }
+    },
+    "bin": "sn-tui.exe",
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/HoldenStill/sn-tui/releases/download/v$version/sn-tui-x86_64-pc-windows-msvc.zip"
+            }
+        }
+    }
+}
