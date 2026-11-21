@@ -216,15 +216,25 @@ pub fn run_tui(config: AppConfig, startup_warnings: Vec<String>) -> Result<()> {
 
         terminal.draw(|frame| ui::draw(frame, &mut app))?;
 
-        if event::poll(Duration::from_millis(50))? {
-            match event::read()? {
-                Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    app.handle_key(key);
+        if event::poll(Duration::from_millis(16))? {
+            let mut any_event = false;
+            while {
+                match event::read()? {
+                    Event::Key(key) if key.kind == KeyEventKind::Press => {
+                        app.handle_key(key);
+                        any_event = true;
+                    }
+                    Event::Mouse(mouse) if app.handle_mouse(mouse) => {
+                        any_event = true;
+                    }
+                    _ => {}
                 }
-                Event::Mouse(mouse) => {
-                    app.handle_mouse(mouse);
-                }
-                _ => {}
+                event::poll(Duration::from_millis(0))?
+            } {}
+
+            if any_event && app.pending_viewport_update {
+                app.rebuild_image_protocol();
+                app.pending_viewport_update = false;
             }
         }
     }

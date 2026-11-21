@@ -5,7 +5,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
-use ratatui_image::StatefulImage;
+use ratatui_image::{Resize, StatefulImage};
 
 use crate::tui::app::{ActiveDoc, App, ExportScope, Modal, ViewLayout};
 use crate::tui::tree::EntryKind;
@@ -220,7 +220,11 @@ fn draw_center_canvas(frame: &mut Frame, app: &mut App, area: Rect) {
     frame.render_widget(block, area);
 
     if let Some(proto) = app.image_protocol.as_mut() {
-        frame.render_stateful_widget(StatefulImage::default(), inner, proto);
+        frame.render_stateful_widget(
+            StatefulImage::new().resize(Resize::Scale(None)),
+            inner,
+            proto,
+        );
     } else {
         let msg = if app.loading_page {
             "Rendering page..."

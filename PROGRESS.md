@@ -22,6 +22,7 @@
   - Zoom viewport upscaling: `crop_for_zoom` resizes the cropped buffer back to full canvas dimensions, eliminating the viewer shrinking issue and filling the center pane completely.
   - Mouse left-click drag panning in zoomed canvas with `crossterm::event::EnableMouseCapture` and clean cleanup on drop.
   - Automatic disk cache invalidation versioning (`CACHE_VERSION = "v3"`) to prevent stale cached renders.
+  - Zero-lag panning engine: eliminated costly 5-megapixel software upscaling in `crop_for_zoom` (replaced with sub-millisecond memory slicing + native `ratatui_image::Resize::Scale`), combined with 60fps event batch draining and drag coalescing in the TUI event loop.
   - 23/23 unit and integration tests passing; release binary compiled and installed to `~/.local/bin/sn-tui`.
 
 ## Engineering Log
