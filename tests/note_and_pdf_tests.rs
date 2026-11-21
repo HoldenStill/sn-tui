@@ -184,6 +184,31 @@ fn composites_sparse_pdf_mark_overlay_via_pdftoppm() {
 }
 
 #[test]
+fn test_render_section_10_6() {
+    let pdf = std::path::Path::new("/home/holden/Documents/supernote-sync/Note/Calculus III/Section 10.6 - Alternating Series and Conditional Convergence.pdf");
+    if pdf.exists() {
+        let img = sn_tui::pdf::render_pdf_page(pdf, 4, 150, true).unwrap();
+        img.save("/tmp/direct_p4.png").unwrap();
+
+        // Also render raw mark page 4
+        let mark_path = sn_tui::pdf::find_companion_mark(pdf).unwrap();
+        let mut f = std::fs::File::open(&mark_path).unwrap();
+        let nb = sn_tui::note::parse_notebook(&mut f).unwrap();
+        let (_, p) = nb.find_page_by_number(4).unwrap();
+        let mark_img = sn_tui::note::render_page_rgba(&mut f, p, None, true).unwrap();
+        mark_img.save("/tmp/raw_mark_p4.png").unwrap();
+        println!("Saved /tmp/raw_mark_p4.png");
+
+        assert_eq!(img.width(), 2560);
+        assert_eq!(img.height(), 1920);
+
+        let out_pdf = std::path::Path::new("/tmp/sec10_6_annotated.pdf");
+        sn_tui::export::export_annotated_pdf(pdf, &mark_path, out_pdf).unwrap();
+        assert!(out_pdf.exists());
+    }
+}
+
+#[test]
 fn rejects_corrupt_files_without_panicking() {
     let mut short = Cursor::new(b"not a note".to_vec());
     assert!(parse_notebook(&mut short).is_err());

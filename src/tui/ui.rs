@@ -518,6 +518,7 @@ fn draw_help_popup(frame: &mut Frame) {
         Line::from("i              Toggle Dark / Invert color mode"),
         Line::from("1 – 5          Toggle .note layers (1 toggles PDF .mark overlay)"),
         Line::from("+ / - / 0      Zoom in / zoom out / reset zoom"),
+        Line::from("Mouse Drag     Pan zoomed canvas smoothly with left-click"),
         Line::from("/              Fuzzy search filenames & OCR text"),
         Line::from("e              Open Export modal"),
         Line::from("s              Pull-sync active Cloud / Private Cloud / WebDAV profile"),

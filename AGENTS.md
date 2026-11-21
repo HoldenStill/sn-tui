@@ -38,6 +38,7 @@
 | `i` / `I` | Toggle Dark / Invert color mode (white e-ink -> dark slate) |
 | `1`–`5` | Toggle layer visibility (`.note` layers or `.mark` overlay on PDF) |
 | `+` / `-` / `0` | Zoom in / out / reset zoom |
+| `Left-click Drag` | Pan zoomed canvas smoothly with mouse |
 | `/` | Fuzzy search filenames & indexed OCR text |
 | `e` / `E` | Open Export modal (current file or directory) |
 | `s` / `S` | Run pull-sync for active cloud/WebDAV profile |

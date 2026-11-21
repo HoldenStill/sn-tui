@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::note::extract_notebook_text;
 
 const DEFAULT_MEM_CACHE_PAGES: usize = 6;
+const CACHE_VERSION: &str = "v3";
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PageCacheKey {
@@ -54,7 +55,7 @@ impl PageCacheKey {
 
     pub fn disk_filename(&self) -> String {
         let hash = fnv1a_64(&format!(
-            "{}|{}|{}|{}|{}",
+            "{CACHE_VERSION}|{}|{}|{}|{}|{}",
             self.path.to_string_lossy(),
             self.mtime_nanos,
             self.file_size,

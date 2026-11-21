@@ -119,6 +119,7 @@ pub struct App {
     pub should_quit: bool,
     pub worker: RenderWorker,
     pub pending_sync_triggers: Vec<SyncTrigger>,
+    pub last_mouse_pos: Option<(u16, u16)>,
 }
 
 impl App {
@@ -180,6 +181,7 @@ impl App {
             should_quit: false,
             worker,
             pending_sync_triggers: Vec::new(),
+            last_mouse_pos: None,
         };
 
         app.select_current_row();
@@ -256,6 +258,37 @@ impl App {
                     );
                 }
             }
+        }
+    }
+
+    pub fn handle_mouse(&mut self, mouse: crossterm::event::MouseEvent) {
+        use crossterm::event::{MouseButton, MouseEventKind};
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.last_mouse_pos = Some((mouse.column, mouse.row));
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                if let Some((prev_col, prev_row)) = self.last_mouse_pos {
+                    if self.zoom > 1.05 {
+                        let dx = mouse.column as i32 - prev_col as i32;
+                        let dy = mouse.row as i32 - prev_row as i32;
+                        if dx != 0 || dy != 0 {
+                            let sens_x = 0.020 / self.zoom;
+                            let sens_y = 0.040 / self.zoom;
+                            self.pan_x = (self.pan_x - dx as f32 * sens_x).clamp(0.0, 1.0);
+                            self.pan_y = (self.pan_y - dy as f32 * sens_y).clamp(0.0, 1.0);
+                            self.rebuild_image_protocol();
+                        }
+                    }
+                    self.last_mouse_pos = Some((mouse.column, mouse.row));
+                } else {
+                    self.last_mouse_pos = Some((mouse.column, mouse.row));
+                }
+            }
+            MouseEventKind::Up(MouseButton::Left) => {
+                self.last_mouse_pos = None;
+            }
+            _ => {}
         }
     }
 
@@ -827,5 +860,8 @@ fn crop_for_zoom(img: &DynamicImage, zoom: f32, pan_x: f32, pan_y: f32) -> Dynam
     let max_y = h.saturating_sub(crop_h);
     let x = ((max_x as f32) * pan_x.clamp(0.0, 1.0)) as u32;
     let y = ((max_y as f32) * pan_y.clamp(0.0, 1.0)) as u32;
-    img.crop_imm(x, y, crop_w, crop_h)
+    let cropped = img.crop_imm(x, y, crop_w, crop_h);
+    // Upscale cropped viewport back to original canvas resolution so StatefulImage
+    // maintains a constant full-pane footprint without shrinking the viewer widget.
+    cropped.resize_exact(w, h, image::imageops::FilterType::Triangle)
 }

@@ -10,7 +10,6 @@ use std::path::Path;
 use anyhow::{Context, Result, anyhow};
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
-use image::imageops;
 use lopdf::{Dictionary, Document, Object, ObjectId, Stream, dictionary};
 
 use crate::note::{parse_notebook, render_page_rgba};
@@ -34,30 +33,26 @@ pub fn export_annotated_pdf(pdf_path: &Path, mark_path: &Path, output_path: &Pat
 
         let rgba = render_page_rgba(&mut mark_file, mark_page, None, true)?;
 
-        // Supernote letterboxes non-native aspect ratio PDFs on screen.
-        // Crop the .mark canvas to the subregion corresponding to the actual PDF page
-        // so annotations align 1:1 with vector text on exported slides/documents.
+        // Supernote letterboxes non-native aspect ratio PDFs on screen, top-aligning the slide
+        // and leaving extra white margin at the bottom for handwritten notes.
+        // We expand the PDF page MediaBox to match the Supernote canvas aspect ratio (e.g. 4:3)
+        // so that 100% of handwriting is preserved without clipping off-slide notes.
         let canvas_w = mark_page.width as f64;
         let canvas_h = mark_page.height as f64;
         let scale = (canvas_w / box_w).min(canvas_h / box_h);
-        let target_w = (box_w * scale).round() as u32;
-        let target_h = (box_h * scale).round() as u32;
-        let offset_x = (mark_page.width.saturating_sub(target_w)) / 2;
-        let offset_y = (mark_page.height.saturating_sub(target_h)) / 2;
+        let new_box_w = canvas_w / scale;
+        let new_box_h = canvas_h / scale;
+        let shift_x = (new_box_w - box_w) / 2.0;
+        let shift_y = new_box_h - box_h; // Top-aligned slide: margin at bottom
 
-        let cropped = if offset_x > 0 || offset_y > 0 || target_w != mark_page.width || target_h != mark_page.height {
-            imageops::crop_imm(&rgba, offset_x, offset_y, target_w, target_h).to_image()
-        } else {
-            rgba
-        };
-        let (w, h) = cropped.dimensions();
+        let (w, h) = rgba.dimensions();
 
         // Split RGBA into compact 8-bit grayscale + 8-bit alpha SMask.
         let pixel_count = (w as usize) * (h as usize);
         let mut gray_raw = Vec::with_capacity(pixel_count);
         let mut alpha_raw = Vec::with_capacity(pixel_count);
         let mut has_ink = false;
-        for px in cropped.as_raw().as_chunks::<4>().0 {
+        for px in rgba.as_raw().as_chunks::<4>().0 {
             let luma = if px[0] == px[1] && px[1] == px[2] {
                 px[0]
             } else {
@@ -71,6 +66,20 @@ pub fn export_annotated_pdf(pdf_path: &Path, mark_path: &Path, output_path: &Pat
         }
         if !has_ink {
             continue;
+        }
+
+        // Expand page MediaBox and CropBox to match canvas aspect ratio
+        if let Ok(page_dict) = doc.get_object_mut(page_id).and_then(|o| o.as_dict_mut()) {
+            let mb_arr = vec![
+                Object::Real(x0 as f32),
+                Object::Real(y0 as f32),
+                Object::Real((x0 + new_box_w) as f32),
+                Object::Real((y0 + new_box_h) as f32),
+            ];
+            page_dict.set("MediaBox", Object::Array(mb_arr.clone()));
+            if page_dict.has(b"CropBox") {
+                page_dict.set("CropBox", Object::Array(mb_arr));
+            }
         }
 
         let gray_zlib = zlib_compress(&gray_raw)?;
@@ -106,10 +115,19 @@ pub fn export_annotated_pdf(pdf_path: &Path, mark_path: &Path, output_path: &Pat
         let xobj_name = format!("SnMarkP{}", mark_page.page_number);
         attach_xobject_to_page(&mut doc, page_id, &xobj_name, image_id)?;
 
-        // Wrap existing page contents in q ... Q so our overlay always draws in clean page space.
-        let save_id = doc.add_object(Stream::new(Dictionary::new(), b"q\n".to_vec()));
-        let overlay_ops = format!("Q\nq\n{box_w:.3} 0 0 {box_h:.3} {x0:.3} {y0:.3} cm\n/{xobj_name} Do\nQ\n");
+        // Draw white background over expanded canvas, shift original vector page to top,
+        // then stamp full-resolution .mark overlay 1:1 on top.
+        let save_ops = format!(
+            "q\n1 g\n{x0:.3} {y0:.3} {new_box_w:.3} {new_box_h:.3} re\nf\nQ\nq\n1 0 0 1 {shift_x:.3} {shift_y:.3} cm\n"
+        );
+        let save_id = doc.add_object(Stream::new(Dictionary::new(), save_ops.into_bytes()));
+
+        let overlay_ops = format!(
+            "Q\nq\n{new_box_w:.3} 0 0 {new_box_h:.3} {x0:.3} {y0:.3} cm\n/{xobj_name} Do\nQ\n"
+        );
         let overlay_id = doc.add_object(Stream::new(Dictionary::new(), overlay_ops.into_bytes()));
+
+        prepend_and_append_contents(&mut doc, page_id, save_id, overlay_id)?;
 
         prepend_and_append_contents(&mut doc, page_id, save_id, overlay_id)?;
     }

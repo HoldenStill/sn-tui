@@ -134,7 +134,9 @@ pub fn render_pdf_page(
             let target_h = (pdf_h * scale).round() as u32;
 
             let offset_x = (canvas_w.saturating_sub(target_w)) / 2;
-            let offset_y = (canvas_h.saturating_sub(target_h)) / 2;
+            // Supernote anchors non-native aspect ratio PDFs to the top edge (Y=0, X=centered)
+            // leaving all extra margin at the bottom of the canvas for handwritten notes.
+            let offset_y = 0;
 
             let scaled_pdf = if base.width() != target_w || base.height() != target_h {
                 imageops::resize(&base, target_w, target_h, imageops::FilterType::Triangle)

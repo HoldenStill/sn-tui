@@ -127,6 +127,7 @@ sn-tui ~/Supernote   # opens a specific directory
 | `i` / `I` | Toggle Dark / Invert color mode (white e-ink -> dark slate) |
 | `1`–`5` | Toggle `.note` layer visibility (`1` toggles `.mark` overlay on PDFs) |
 | `+` / `-` / `0` | Zoom in / out / reset zoom |
+| `Left-click Drag` | Pan zoomed canvas smoothly with mouse |
 | `/` | Fuzzy search filenames & cached OCR text |
 | `e` / `E` | Open Export modal (selected file or workspace directory) |
 | `s` / `S` | Run pull-sync for active profile |

@@ -15,7 +15,7 @@ use walkdir::WalkDir;
 
 use crate::note::{extract_notebook_text, parse_notebook_file, render_page_gray};
 use crate::pdf::find_companion_mark;
-use mark_pdf::export_annotated_pdf;
+pub use mark_pdf::export_annotated_pdf;
 use raster_pdf::export_note_raster_pdf;
 use supernote_tool::SupernoteToolBackend;
 

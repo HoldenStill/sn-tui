@@ -16,6 +16,13 @@
   - Letterboxing fix for non-4:3 PDFs (e.g. 16:9 Calculus III lecture slides on 4:3 Manta canvas) in both live preview and lossless PDF export.
   - Marker/highlighter semitransparency (`0x66`, `0x67`, `0x68`, `0x9e`, `0xca` ~43% opacity) with Porter-Duff source-over alpha blending so highlighters don't black out text.
   - 22/22 unit and integration tests passing; installed release binary in `~/.local/bin/sn-tui`.
+- [x] **Milestone 8** (`750cea9`): PDF Canvas Margin Expansion, Zoom Viewport Scaling & Mouse Panning:
+  - Top-aligned PDF slide placement (`Y=0`, `X=centered`) with remaining margin at bottom in both preview and lossless export, aligning handwriting with 100% precision with zero text collisions.
+  - Expanded PDF MediaBox & CropBox in `src/export/mark_pdf.rs` to match the Supernote canvas (e.g. 4:3) with clean white background and shifted vector stream, preserving 100% of annotations written off the slide edge.
+  - Zoom viewport upscaling: `crop_for_zoom` resizes the cropped buffer back to full canvas dimensions, eliminating the viewer shrinking issue and filling the center pane completely.
+  - Mouse left-click drag panning in zoomed canvas with `crossterm::event::EnableMouseCapture` and clean cleanup on drop.
+  - Automatic disk cache invalidation versioning (`CACHE_VERSION = "v3"`) to prevent stale cached renders.
+  - 23/23 unit and integration tests passing; release binary compiled and installed to `~/.local/bin/sn-tui`.
 
 ## Engineering Log
 - **2026-11-17 (Phase 0):** Inspected `RohanGautam/supernote_pdf`, `jya-dev/supernote-tool`, `julianprester/sncloud`, `allenporter/supernote`, and verified crates.io versions (`ratatui 0.30.2`, `ratatui-image 11.1.0`, `crossterm 0.29`, `ureq 3.5`, `lopdf 0.47`). Confirmed Artix host has `rustc 1.99.1`, `pdftoppm`, and `pdfinfo`. Locked in non-`tokio` architecture with `ureq` + bounded `rayon`.
