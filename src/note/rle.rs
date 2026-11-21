@@ -98,16 +98,35 @@ fn push_clamped(out: &mut Vec<u8>, color: u8, count: usize, max_len: usize) {
 }
 
 /// Maps a Supernote X / X2 pixel byte code to RGBA.
+///
+/// Markers/highlighters (`0x66`, `0x67`/`0x9e`, `0x68`/`0xca`) are mapped to
+/// semitransparent alpha (~110 / 255, approx 43% opacity) so they highlight
+/// rather than obscuring underlying text or background templates.
 #[inline]
 pub fn color_code_to_rgba(code: u8) -> Rgba<u8> {
     match code {
-        0x61 | 0x66 => Rgba([0, 0, 0, 255]),          // Black / Marker black
-        0x62 => Rgba([0, 0, 0, 0]),                   // Transparent background
-        0x65 => Rgba([255, 255, 255, 255]),           // Opaque white
-        0x63 | 0x67 | 0x9d | 0x9e => Rgba([0x9d, 0x9d, 0x9d, 255]), // Dark gray (X & X2)
-        0x64 | 0x68 | 0xc9 | 0xca => Rgba([0xc9, 0xc9, 0xc9, 255]), // Gray (X & X2)
+        0x61 => Rgba([0, 0, 0, 255]),                         // Solid black pen
+        0x62 => Rgba([0, 0, 0, 0]),                           // Transparent background
+        0x65 => Rgba([255, 255, 255, 255]),                   // Opaque white
+        0x63 | 0x9d => Rgba([0x9d, 0x9d, 0x9d, 255]),         // Solid dark gray pen (X & X2)
+        0x64 | 0xc9 => Rgba([0xc9, 0xc9, 0xc9, 255]),         // Solid gray pen (X & X2)
+        0x66 => Rgba([0x20, 0x20, 0x20, 110]),                 // Translucent marker black
+        0x67 | 0x9e => Rgba([0x9d, 0x9d, 0x9d, 110]),         // Translucent marker dark gray
+        0x68 | 0xca => Rgba([0xc9, 0xc9, 0xc9, 110]),         // Translucent marker gray
         // X2 anti-aliased stroke grayscale intensity
         v => Rgba([v, v, v, 255]),
+    }
+}
+
+/// Inverts colors of an RGBA image in-place (used for dark/invert mode).
+/// Preserves transparency.
+pub fn invert_image(img: &mut RgbaImage) {
+    for px in img.pixels_mut() {
+        if px[3] > 0 {
+            px[0] = 255 - px[0];
+            px[1] = 255 - px[1];
+            px[2] = 255 - px[2];
+        }
     }
 }
 
@@ -151,18 +170,38 @@ pub fn render_page_rgba<R: Read + Seek>(
                 let all_blank = layer.key == "BGLAYER"
                     && (page.style == "style_white" || page.style.is_empty());
                 let decoded = decode_ratta_rle(&block, page.width, page.height, all_blank)?;
-                // Direct composite without allocating an extra RGBA buffer per layer!
+                // Direct Porter-Duff "over" composite without allocating an extra RGBA buffer per layer!
                 let canvas_buf = canvas.as_mut();
                 for (px_idx, &code) in decoded.iter().enumerate() {
                     if code == 0x62 {
                         continue; // Transparent: skip
                     }
                     let rgba = color_code_to_rgba(code);
+                    let sa = rgba[3] as u32;
                     let off = px_idx * 4;
-                    canvas_buf[off] = rgba[0];
-                    canvas_buf[off + 1] = rgba[1];
-                    canvas_buf[off + 2] = rgba[2];
-                    canvas_buf[off + 3] = rgba[3];
+                    if sa == 255 {
+                        canvas_buf[off] = rgba[0];
+                        canvas_buf[off + 1] = rgba[1];
+                        canvas_buf[off + 2] = rgba[2];
+                        canvas_buf[off + 3] = 255;
+                    } else if sa > 0 {
+                        let da = canvas_buf[off + 3] as u32;
+                        if da == 0 {
+                            canvas_buf[off] = rgba[0];
+                            canvas_buf[off + 1] = rgba[1];
+                            canvas_buf[off + 2] = rgba[2];
+                            canvas_buf[off + 3] = sa as u8;
+                        } else {
+                            // Porter-Duff "over":
+                            // out_a = sa + da * (255 - sa) / 255 (guaranteed >= sa > 0)
+                            let inv_sa = 255 - sa;
+                            let out_a = sa + (da * inv_sa) / 255;
+                            canvas_buf[off] = ((rgba[0] as u32 * sa + (canvas_buf[off] as u32 * da * inv_sa) / 255) / out_a) as u8;
+                            canvas_buf[off + 1] = ((rgba[1] as u32 * sa + (canvas_buf[off + 1] as u32 * da * inv_sa) / 255) / out_a) as u8;
+                            canvas_buf[off + 2] = ((rgba[2] as u32 * sa + (canvas_buf[off + 2] as u32 * da * inv_sa) / 255) / out_a) as u8;
+                            canvas_buf[off + 3] = out_a as u8;
+                        }
+                    }
                 }
             }
             "PNG" => {

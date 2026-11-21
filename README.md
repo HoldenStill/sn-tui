@@ -19,6 +19,8 @@ A fast, zero-GUI-toolkit Terminal User Interface (TUI) and headless CLI written 
   - Native support for **Official Ratta Supernote Private Cloud (Docker)**, **Free Supernote Cloud (`https://cloud.supernote.com`)**, **`allenporter/supernote` Open Private Cloud (`sn_...` Bearer tokens)**, and **Standard WebDAV**.
   - **Pull-only mirror by default** (never deletes or mutates remote notes) + **explicit upload** (`sn-tui upload` or `u` in TUI) for pushing PDFs/templates to your tablet.
   - Built-in `notify` filesystem watcher refreshes the TUI, invalidates caches, and optionally runs auto-exports when local files change.
+- **Flexible Multi-Pane Layouts & Reader Views:** 4 view modes (`Standard3Pane`, `WideReader`, `BottomInspector`, and 100% `FullFocus` fullscreen), dark/invert color mode (`i`) for comfortable reading in dark Wayland terminals, and 4-directional arrow key panning when zoomed.
+- **Letterbox-Aware PDF Annotations & Translucent Markers:** Correct letterbox margins for non-4:3 PDFs (e.g., 16:9 lecture slides) in both live viewing and lossless vector PDF exports, with semitransparent highlighter decoding and Porter-Duff alpha blending.
 - **Bounded Resource Usage:** 128 MB LRU disk cache (`~/.cache/sn-tui/pages/`), lazy OCR index (`ocr_index.json`), and a 6-page in-memory prefetch window.
 
 ## Installation
@@ -115,19 +117,23 @@ sn-tui ~/Supernote   # opens a specific directory
 
 | Key | Action |
 |---|---|
-| `j` / `k` or `↓` / `↑` | Move selection down / up in library tree |
-| `h` / `l` or `←` / `→` | Collapse / expand directory (or pan when zoomed) |
+| `j` / `k` (or `G` / `Home`) | Move selection down / up in library tree (`G` bottom, `Home` top) |
+| `↑` / `↓` / `←` / `→` | Pan zoomed canvas in all 4 directions (or navigate tree/folders when 1.0x) |
+| `h` / `l` or `Enter` | Collapse / expand directory |
 | `n` / `p` or `J` / `K` | Next / previous page |
 | `g` | Jump to page number |
+| `v` | Cycle view layout (`Standard3Pane` -> `WideReader` -> `BottomInspector` -> `FullFocus`) |
+| `f` / `F` | Toggle Full Focus / Fullscreen canvas mode |
+| `i` / `I` | Toggle Dark / Invert color mode (white e-ink -> dark slate) |
 | `1`–`5` | Toggle `.note` layer visibility (`1` toggles `.mark` overlay on PDFs) |
 | `+` / `-` / `0` | Zoom in / out / reset zoom |
 | `/` | Fuzzy search filenames & cached OCR text |
-| `e` | Open Export modal (selected file or workspace directory) |
-| `s` | Run pull-sync for active profile |
-| `u` | Upload selected local PDF/template to remote folder |
-| `r` | Refresh tree & invalidate active page cache |
+| `e` / `E` | Open Export modal (selected file or workspace directory) |
+| `s` / `S` | Run pull-sync for active profile |
+| `u` / `U` | Upload selected local PDF/template to remote folder |
+| `r` / `R` | Refresh tree & invalidate active page cache |
 | `?` | Toggle help overlay |
-| `q` / `Ctrl+C` | Quit cleanly |
+| `q` / `Q` / `Ctrl+C` | Quit cleanly |
 
 ### 3. Headless CLI Subcommands
 ```bash

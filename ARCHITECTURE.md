@@ -7,7 +7,7 @@
   - `/DeviceGray` PDF image encoding (1/3 RAM and ~3x smaller PDFs than RGB for monochrome e-ink pages).
   - Landscape orientation (`ORIENTATION=1090`), `all_blank` RLE handling (`0x400` vs `0x4000`), full X & X2 color tables, sparse `.mark` page numbers, selective layer visibility, and native `RECOGNTEXT` extraction.
 - **`jya-dev/supernote-tool` (`supernotelib`, Apache-2.0):** Canonical reference for Supernote binary quirks:
-  - `RATTA_RLE` X vs X2 color codes (`0x61` black, `0x62` transparent, `0x63`/`0x9d`/`0x9e` dark gray, `0x64`/`0xc9`/`0xca` gray, `0x65` white, plus raw anti-aliased grayscale bytes on X2).
+  - `RATTA_RLE` X vs X2 color codes (`0x61` black, `0x62` transparent, `0x63`/`0x9d` dark gray, `0x64`/`0xc9` gray, `0x65` white, `0x66`/`0x67`/`0x9e`/`0x68`/`0xca` translucent markers, plus raw anti-aliased grayscale bytes on X2). Markers decode with ~43% alpha (`110/255`) and blend via Porter-Duff source-over compositing.
   - `RECOGNTEXT` stores base64-encoded UTF-8 JSON (`{"elements": [{"type": "Text", "label": "...", "words": [{"bounding-box": {"y": ...}}]}]}`), enabling zero-Python OCR text extraction in pure Rust.
   - CLI flags verified for optional Vector PDF (`convert -t pdf --pdf-type vector -a`) and SVG (`convert -t svg -a`) subprocess exports.
 
@@ -64,6 +64,11 @@ When a page has `ORIENTATION:1090`, width and height are swapped (`height × wid
 ## 3. PDF + `.pdf.mark` Hybrid Architecture
 - **Viewing (Zero linked C PDF bloat):** Uses host `pdfinfo` for page count and `pdftoppm -png -r <dpi> -f <p> -l <p> -singlefile` (from Artix `poppler`) to rasterize only the currently viewed PDF page directly into memory (`stdout`), then alpha-composites the matching `.mark` `PAGE<p>` RGBA bitmap on top.
 - **Exporting (Lossless Vector Preservation):** Pure-Rust `lopdf` loads the original `<doc>.pdf`, embeds each annotated `.mark` page as a compressed RGB/Gray + 8-bit Alpha `SMask` PDF XObject, and appends a lightweight `q w 0 0 h 0 0 cm /SnMark Do Q` drawing command to that page—preserving original selectable text, fonts, and hyperlinks.
+
+### 3.1 Aspect-Ratio Letterbox Alignment
+When non-4:3 PDFs (e.g., 16:9 lecture slides) are annotated on Supernote devices (e.g., 4:3 A5 X2 Manta `2560x1920`), the tablet displays the PDF centered with letterbox/pillarbox margins while recording annotations across the physical canvas.
+- **Viewing:** Uniformly scales the PDF raster to fit the screen dimensions $\min(canvas\_w / pdf\_w, canvas\_h / pdf\_h)$ and centers it at `(offset_x, offset_y)` on a white device canvas before overlaying the `.mark` layer at `(0, 0)`.
+- **Lossless Vector Export:** Crops the `.mark` canvas to the active PDF slide rectangle `[offset_x, offset_y, target_w, target_h]` before generating the `/SMask` XObject, mapping annotations 1:1 onto the PDF MediaBox with zero vertical offset.
 
 ---
 

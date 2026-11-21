@@ -10,7 +10,7 @@ use sn_tui::note::fixture::{
     DEFAULT_SIGNATURE, FixtureLayer, FixtureLayerData, FixtureNotebook, FixturePage,
     build_sample_pdf, build_supernote_bytes,
 };
-use sn_tui::tui::app::{App, Modal};
+use sn_tui::tui::app::{App, Modal, ViewLayout};
 use sn_tui::tui::tree::EntryKind;
 use sn_tui::tui::ui;
 
@@ -137,5 +137,120 @@ fn tui_renders_three_panes_groups_pdf_mark_and_handles_navigation() {
 
     // Quit cleanly
     app.handle_key(key(KeyCode::Char('q')));
+    assert!(app.should_quit);
+}
+
+#[test]
+fn tui_layout_zoom_and_caps_lock_controls() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let ws = dir.path().join("Supernote");
+    let cache = dir.path().join("cache");
+    fs::create_dir_all(&ws).expect("mkdir ws");
+
+    let w = 1404u32;
+    let h = 1872u32;
+    let pixels = vec![0x62u8; (w * h) as usize];
+    let note_bytes = build_supernote_bytes(&FixtureNotebook {
+        is_mark: false,
+        equipment: "A5X".to_string(),
+        signature: DEFAULT_SIGNATURE.to_string(),
+        pages: vec![
+            FixturePage {
+                page_number: 1,
+                landscape: false,
+                layers: vec![FixtureLayer {
+                    name: "MAINLAYER".to_string(),
+                    data: FixtureLayerData::RattaRle(pixels.clone()),
+                    visible: true,
+                }],
+                recognition_lines: None,
+            },
+            FixturePage {
+                page_number: 2,
+                landscape: false,
+                layers: vec![FixtureLayer {
+                    name: "MAINLAYER".to_string(),
+                    data: FixtureLayerData::RattaRle(pixels),
+                    visible: true,
+                }],
+                recognition_lines: None,
+            },
+        ],
+    });
+    fs::write(ws.join("file1.note"), &note_bytes).expect("write file1");
+    fs::write(ws.join("file2.note"), &note_bytes).expect("write file2");
+
+    let cfg = AppConfig {
+        workspace_dir: ws.clone(),
+        export_dir: dir.path().join("Exports"),
+        ..AppConfig::default()
+    };
+
+    let mut app = App::new(cfg, cache, Picker::halfblocks(), vec![]);
+    assert_eq!(app.view_layout, ViewLayout::Standard3Pane);
+
+    // 1. Layout cycling: Standard3Pane -> WideReader -> BottomInspector -> FullFocus -> Standard3Pane
+    app.handle_key(key(KeyCode::Char('v')));
+    assert_eq!(app.view_layout, ViewLayout::WideReader);
+    app.handle_key(key(KeyCode::Char('v')));
+    assert_eq!(app.view_layout, ViewLayout::BottomInspector);
+    app.handle_key(key(KeyCode::Char('v')));
+    assert_eq!(app.view_layout, ViewLayout::FullFocus);
+    app.handle_key(key(KeyCode::Char('v')));
+    assert_eq!(app.view_layout, ViewLayout::Standard3Pane);
+
+    // 2. Fullscreen toggle with 'f' and restore with 'f' or 'Esc'
+    app.handle_key(key(KeyCode::Char('f')));
+    assert_eq!(app.view_layout, ViewLayout::FullFocus);
+    app.handle_key(key(KeyCode::Char('f')));
+    assert_eq!(app.view_layout, ViewLayout::Standard3Pane);
+    app.handle_key(key(KeyCode::Char('F'))); // Caps Lock 'F'
+    assert_eq!(app.view_layout, ViewLayout::FullFocus);
+    app.handle_key(key(KeyCode::Esc)); // Esc exits FullFocus
+    assert_eq!(app.view_layout, ViewLayout::Standard3Pane);
+
+    // 3. Dark/Invert mode toggle with 'i' / 'I'
+    assert!(!app.invert_colors);
+    app.handle_key(key(KeyCode::Char('i')));
+    assert!(app.invert_colors);
+    app.handle_key(key(KeyCode::Char('I'))); // Caps Lock 'I'
+    assert!(!app.invert_colors);
+
+    // 4. Zoom in and Pan Controls
+    assert_eq!(app.zoom, 1.0);
+    app.handle_key(key(KeyCode::Char('+')));
+    assert!(app.zoom > 1.05);
+
+    let initial_pan_x = app.pan_x;
+    let initial_pan_y = app.pan_y;
+
+    // Arrow keys pan when zoomed:
+    app.handle_key(key(KeyCode::Right));
+    assert!(app.pan_x > initial_pan_x);
+    app.handle_key(key(KeyCode::Down));
+    assert!(app.pan_y > initial_pan_y);
+
+    // Vim j/k moves file selection even while zoomed!
+    assert_eq!(app.selected_idx, 0);
+    app.handle_key(key(KeyCode::Char('j')));
+    assert_eq!(app.selected_idx, 1);
+    app.handle_key(key(KeyCode::Char('k')));
+    assert_eq!(app.selected_idx, 0);
+
+    // Reset zoom with '0'
+    app.handle_key(key(KeyCode::Char('0')));
+    assert_eq!(app.zoom, 1.0);
+    assert_eq!(app.pan_x, 0.5);
+    assert_eq!(app.pan_y, 0.5);
+
+    // 5. Caps Lock Case-Insensitive Action Commands:
+    // 'E' opens Export modal, 'Q' closes it
+    app.handle_key(key(KeyCode::Char('E')));
+    assert!(matches!(app.modal, Modal::Export(_)));
+    app.handle_key(key(KeyCode::Char('Q')));
+    assert!(matches!(app.modal, Modal::None));
+
+    // 'Q' quits cleanly
+    app.handle_key(key(KeyCode::Char('Q')));
     assert!(app.should_quit);
 }

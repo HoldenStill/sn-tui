@@ -10,6 +10,7 @@ use std::path::Path;
 use anyhow::{Context, Result, anyhow};
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
+use image::imageops;
 use lopdf::{Dictionary, Document, Object, ObjectId, Stream, dictionary};
 
 use crate::note::{parse_notebook, render_page_rgba};
@@ -29,15 +30,34 @@ pub fn export_annotated_pdf(pdf_path: &Path, mark_path: &Path, output_path: &Pat
             continue;
         };
 
+        let (x0, y0, box_w, box_h) = page_media_box(&doc, page_id).unwrap_or((0.0, 0.0, 595.28, 841.89));
+
         let rgba = render_page_rgba(&mut mark_file, mark_page, None, true)?;
-        let (w, h) = rgba.dimensions();
+
+        // Supernote letterboxes non-native aspect ratio PDFs on screen.
+        // Crop the .mark canvas to the subregion corresponding to the actual PDF page
+        // so annotations align 1:1 with vector text on exported slides/documents.
+        let canvas_w = mark_page.width as f64;
+        let canvas_h = mark_page.height as f64;
+        let scale = (canvas_w / box_w).min(canvas_h / box_h);
+        let target_w = (box_w * scale).round() as u32;
+        let target_h = (box_h * scale).round() as u32;
+        let offset_x = (mark_page.width.saturating_sub(target_w)) / 2;
+        let offset_y = (mark_page.height.saturating_sub(target_h)) / 2;
+
+        let cropped = if offset_x > 0 || offset_y > 0 || target_w != mark_page.width || target_h != mark_page.height {
+            imageops::crop_imm(&rgba, offset_x, offset_y, target_w, target_h).to_image()
+        } else {
+            rgba
+        };
+        let (w, h) = cropped.dimensions();
 
         // Split RGBA into compact 8-bit grayscale + 8-bit alpha SMask.
         let pixel_count = (w as usize) * (h as usize);
         let mut gray_raw = Vec::with_capacity(pixel_count);
         let mut alpha_raw = Vec::with_capacity(pixel_count);
         let mut has_ink = false;
-        for px in rgba.as_raw().as_chunks::<4>().0 {
+        for px in cropped.as_raw().as_chunks::<4>().0 {
             let luma = if px[0] == px[1] && px[1] == px[2] {
                 px[0]
             } else {
@@ -83,7 +103,6 @@ pub fn export_annotated_pdf(pdf_path: &Path, mark_path: &Path, output_path: &Pat
             gray_zlib,
         ));
 
-        let (x0, y0, box_w, box_h) = page_media_box(&doc, page_id).unwrap_or((0.0, 0.0, 595.28, 841.89));
         let xobj_name = format!("SnMarkP{}", mark_page.page_number);
         attach_xobject_to_page(&mut doc, page_id, &xobj_name, image_id)?;
 

@@ -27,6 +27,34 @@ pub enum ActiveDoc {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewLayout {
+    Standard3Pane,    // 26% Tree, 50% Canvas, 24% Inspector
+    WideReader,       // 25% Tree, 75% Canvas (Inspector hidden)
+    BottomInspector,  // 25% Tree left, Canvas 75% height top-right, Inspector 25% bottom-right
+    FullFocus,        // 100% Canvas only (Tree & Inspector hidden)
+}
+
+impl ViewLayout {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Standard3Pane => Self::WideReader,
+            Self::WideReader => Self::BottomInspector,
+            Self::BottomInspector => Self::FullFocus,
+            Self::FullFocus => Self::Standard3Pane,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Standard3Pane => "3-Pane",
+            Self::WideReader => "Wide",
+            Self::BottomInspector => "Bottom",
+            Self::FullFocus => "Focus",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportScope {
     SelectedFile,
     WorkspaceFolder,
@@ -85,6 +113,9 @@ pub struct App {
     pub logs: VecDeque<String>,
     pub cache_bytes: u64,
     pub supernote_tool: SupernoteToolBackend,
+    pub view_layout: ViewLayout,
+    pub prev_view_layout: ViewLayout,
+    pub invert_colors: bool,
     pub should_quit: bool,
     pub worker: RenderWorker,
     pub pending_sync_triggers: Vec<SyncTrigger>,
@@ -143,6 +174,9 @@ impl App {
             logs,
             cache_bytes: 0,
             supernote_tool,
+            view_layout: ViewLayout::Standard3Pane,
+            prev_view_layout: ViewLayout::Standard3Pane,
+            invert_colors: false,
             should_quit: false,
             worker,
             pending_sync_triggers: Vec::new(),
@@ -233,7 +267,7 @@ impl App {
 
         match &mut self.modal {
             Modal::Help => {
-                if matches!(key.code, KeyCode::Esc | KeyCode::Char('?' | 'q')) {
+                if matches!(key.code, KeyCode::Esc | KeyCode::Char('?' | 'q' | 'Q')) {
                     self.modal = Modal::None;
                 }
             }
@@ -247,48 +281,67 @@ impl App {
 
     fn handle_normal_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('q') => self.should_quit = true,
+            KeyCode::Char('q' | 'Q') => self.should_quit = true,
             KeyCode::Char('?') => self.modal = Modal::Help,
             KeyCode::Char('/') => {
                 self.modal = Modal::Search;
             }
             KeyCode::Esc => {
-                if !self.tree.filter.is_empty() {
+                if self.view_layout == ViewLayout::FullFocus {
+                    self.view_layout = self.prev_view_layout;
+                    self.push_log(format!("View layout: {}", self.view_layout.label()));
+                } else if !self.tree.filter.is_empty() {
                     self.tree.filter.clear();
                     self.tree.rebuild(&self.ocr_index);
                     self.clamp_selection();
                     self.select_current_row();
                 }
             }
-            KeyCode::Char('j') | KeyCode::Down => {
+            // Strict Vim navigation for tree: always moves tree selection
+            KeyCode::Char('j') => {
                 if self.selected_idx + 1 < self.tree.rows.len() {
                     self.selected_idx += 1;
                     self.select_current_row();
                 }
             }
-            KeyCode::Char('k') | KeyCode::Up => {
+            KeyCode::Char('k') => {
                 if self.selected_idx > 0 {
                     self.selected_idx -= 1;
                     self.select_current_row();
                 }
             }
-            KeyCode::Char('l') | KeyCode::Right | KeyCode::Enter => {
-                if self.zoom > 1.05 && key.code != KeyCode::Enter {
-                    self.pan_x = (self.pan_x + 0.1).min(1.0);
-                    self.rebuild_image_protocol();
-                } else if let Some(row) = self.selected_row().cloned()
-                    && row.kind == EntryKind::Directory
-                {
-                    if self.tree.expanded_dirs.contains(&row.path) {
-                        self.tree.expanded_dirs.remove(&row.path);
-                    } else {
-                        self.tree.expanded_dirs.insert(row.path);
-                    }
-                    self.tree.rebuild(&self.ocr_index);
-                    self.clamp_selection();
+            KeyCode::Char('G') => {
+                if !self.tree.rows.is_empty() {
+                    self.selected_idx = self.tree.rows.len() - 1;
+                    self.select_current_row();
                 }
             }
-            KeyCode::Char('h') | KeyCode::Left => {
+            KeyCode::Home => {
+                if !self.tree.rows.is_empty() {
+                    self.selected_idx = 0;
+                    self.select_current_row();
+                }
+            }
+            // Arrow keys: Pan when zoomed, navigate tree when unzoomed
+            KeyCode::Up => {
+                if self.zoom > 1.05 {
+                    self.pan_y = (self.pan_y - 0.1).max(0.0);
+                    self.rebuild_image_protocol();
+                } else if self.selected_idx > 0 {
+                    self.selected_idx -= 1;
+                    self.select_current_row();
+                }
+            }
+            KeyCode::Down => {
+                if self.zoom > 1.05 {
+                    self.pan_y = (self.pan_y + 0.1).min(1.0);
+                    self.rebuild_image_protocol();
+                } else if self.selected_idx + 1 < self.tree.rows.len() {
+                    self.selected_idx += 1;
+                    self.select_current_row();
+                }
+            }
+            KeyCode::Left => {
                 if self.zoom > 1.05 {
                     self.pan_x = (self.pan_x - 0.1).max(0.0);
                     self.rebuild_image_protocol();
@@ -301,14 +354,52 @@ impl App {
                     self.clamp_selection();
                 }
             }
-            KeyCode::Char('n') | KeyCode::Char('J') => {
+            KeyCode::Right => {
+                if self.zoom > 1.05 {
+                    self.pan_x = (self.pan_x + 0.1).min(1.0);
+                    self.rebuild_image_protocol();
+                } else if let Some(row) = self.selected_row().cloned()
+                    && row.kind == EntryKind::Directory
+                    && !row.expanded
+                {
+                    self.tree.expanded_dirs.insert(row.path);
+                    self.tree.rebuild(&self.ocr_index);
+                    self.clamp_selection();
+                }
+            }
+            // 'h' / 'l' for tree folding
+            KeyCode::Char('h') => {
+                if let Some(row) = self.selected_row().cloned()
+                    && row.kind == EntryKind::Directory
+                    && row.expanded
+                {
+                    self.tree.expanded_dirs.remove(&row.path);
+                    self.tree.rebuild(&self.ocr_index);
+                    self.clamp_selection();
+                }
+            }
+            KeyCode::Char('l') | KeyCode::Enter => {
+                if let Some(row) = self.selected_row().cloned()
+                    && row.kind == EntryKind::Directory
+                {
+                    if self.tree.expanded_dirs.contains(&row.path) {
+                        self.tree.expanded_dirs.remove(&row.path);
+                    } else {
+                        self.tree.expanded_dirs.insert(row.path);
+                    }
+                    self.tree.rebuild(&self.ocr_index);
+                    self.clamp_selection();
+                }
+            }
+            // Page turning (both n/p and J/K, case-insensitive)
+            KeyCode::Char('n' | 'N' | 'J') => {
                 if self.total_pages > 0 && self.current_page < self.total_pages {
                     self.current_page += 1;
                     self.sync_layer_mask_for_current_page();
                     self.request_render();
                 }
             }
-            KeyCode::Char('p') | KeyCode::Char('K') => {
+            KeyCode::Char('p' | 'P' | 'K') => {
                 if self.current_page > 1 {
                     self.current_page -= 1;
                     self.sync_layer_mask_for_current_page();
@@ -319,6 +410,27 @@ impl App {
                 if self.total_pages > 0 {
                     self.modal = Modal::JumpPage(String::new());
                 }
+            }
+            KeyCode::Char('v') => {
+                self.view_layout = self.view_layout.next();
+                self.push_log(format!("View layout: {}", self.view_layout.label()));
+            }
+            KeyCode::Char('f' | 'F') => {
+                if self.view_layout == ViewLayout::FullFocus {
+                    self.view_layout = self.prev_view_layout;
+                } else {
+                    self.prev_view_layout = self.view_layout;
+                    self.view_layout = ViewLayout::FullFocus;
+                }
+                self.push_log(format!("View layout: {}", self.view_layout.label()));
+            }
+            KeyCode::Char('i' | 'I') => {
+                self.invert_colors = !self.invert_colors;
+                self.push_log(format!(
+                    "Dark/Invert mode: {}",
+                    if self.invert_colors { "ON" } else { "OFF" }
+                ));
+                self.rebuild_image_protocol();
             }
             KeyCode::Char('+') | KeyCode::Char('=') => {
                 self.zoom = (self.zoom + 0.5).min(3.5);
@@ -356,15 +468,15 @@ impl App {
                     _ => {}
                 }
             }
-            KeyCode::Char('e') => self.open_export_modal(),
-            KeyCode::Char('s') => {
+            KeyCode::Char('e' | 'E') => self.open_export_modal(),
+            KeyCode::Char('s' | 'S') => {
                 self.push_log("Triggering pull-sync...");
                 self.pending_sync_triggers.push(SyncTrigger::PullSync {
                     profile: self.config.default_profile.clone(),
                 });
             }
-            KeyCode::Char('u') => self.open_upload_modal(),
-            KeyCode::Char('r') => {
+            KeyCode::Char('u' | 'U') => self.open_upload_modal(),
+            KeyCode::Char('r' | 'R') => {
                 if let Some(path) = self.active_path.clone() {
                     let _ = self.worker.tx.send(WorkerRequest::InvalidatePath(path));
                 }
@@ -468,7 +580,7 @@ impl App {
         let mut launch: Option<(PathBuf, PathBuf, ExportFormat)> = None;
         if let Modal::Export(state) = &mut self.modal {
             match key.code {
-                KeyCode::Esc | KeyCode::Char('q') => {
+                KeyCode::Esc | KeyCode::Char('q' | 'Q') => {
                     self.modal = Modal::None;
                     return;
                 }
@@ -692,11 +804,16 @@ impl App {
             self.image_protocol = None;
             return;
         };
-        let display_img = if self.zoom > 1.05 {
+        let mut display_img = if self.zoom > 1.05 {
             crop_for_zoom(img, self.zoom, self.pan_x, self.pan_y)
         } else {
             img.clone()
         };
+        if self.invert_colors {
+            let mut rgba = display_img.to_rgba8();
+            crate::note::invert_image(&mut rgba);
+            display_img = DynamicImage::ImageRgba8(rgba);
+        }
         self.image_protocol = Some(self.picker.new_resize_protocol(display_img));
     }
 }

@@ -28,16 +28,20 @@
 ## TUI Keybindings
 | Key | Action |
 |---|---|
-| `j` / `k` or `↓` / `↑` | Move selection down / up in library tree |
-| `h` / `l` or `←` / `→` | Collapse / expand directory (or pan when zoomed) |
+| `j` / `k` (or `G` / `Home`) | Move selection down / up in library tree (`G` bottom, `Home` top) |
+| `↑` / `↓` / `←` / `→` | Pan zoomed canvas in all 4 directions (or navigate tree/folders when 1.0x) |
+| `h` / `l` or `Enter` | Collapse / expand directory |
 | `n` / `p` or `J` / `K` | Next / previous page |
 | `g` | Jump to page number |
+| `v` | Cycle view layout (`Standard3Pane` -> `WideReader` -> `BottomInspector` -> `FullFocus`) |
+| `f` / `F` | Toggle Full Focus / Fullscreen canvas mode |
+| `i` / `I` | Toggle Dark / Invert color mode (white e-ink -> dark slate) |
 | `1`–`5` | Toggle layer visibility (`.note` layers or `.mark` overlay on PDF) |
 | `+` / `-` / `0` | Zoom in / out / reset zoom |
 | `/` | Fuzzy search filenames & indexed OCR text |
-| `e` | Open Export modal (current file or directory) |
-| `s` | Run pull-sync for active cloud/WebDAV profile |
-| `u` | Upload selected local PDF/template to remote folder |
-| `r` | Refresh workspace tree & invalidate active page cache |
+| `e` / `E` | Open Export modal (current file or directory) |
+| `s` / `S` | Run pull-sync for active cloud/WebDAV profile |
+| `u` / `U` | Upload selected local PDF/template to remote folder |
+| `r` / `R` | Refresh workspace tree & invalidate active page cache |
 | `?` | Toggle keybindings help overlay |
-| `q` / `Ctrl+C` | Quit cleanly |
+| `q` / `Q` / `Ctrl+C` | Quit cleanly |

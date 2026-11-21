@@ -175,9 +175,11 @@ fn composites_sparse_pdf_mark_overlay_via_pdftoppm() {
 
         let cx = with_mark.width() / 2;
         let cy = with_mark.height() / 2;
+        let cx_without = without_mark.width() / 2;
+        let cy_without = without_mark.height() / 2;
         // Middle of page 2 should be black with mark, white without mark
         assert_eq!(with_mark.get_pixel(cx, cy)[0], 0);
-        assert_eq!(without_mark.get_pixel(cx, cy)[0], 255);
+        assert_eq!(without_mark.get_pixel(cx_without, cy_without)[0], 255);
     }
 }
 
@@ -188,4 +190,39 @@ fn rejects_corrupt_files_without_panicking() {
 
     let mut bad_sig = Cursor::new(vec![0u8; 64]);
     assert!(parse_notebook(&mut bad_sig).is_err());
+}
+
+#[test]
+fn marker_codes_are_semitransparent_and_invert_works() {
+    use image::{Rgba, RgbaImage};
+    use sn_tui::note::rle::color_code_to_rgba;
+    use sn_tui::note::invert_image;
+
+    // Solid pens
+    assert_eq!(color_code_to_rgba(0x61)[3], 255);
+    assert_eq!(color_code_to_rgba(0x63)[3], 255);
+    assert_eq!(color_code_to_rgba(0x9d)[3], 255);
+    assert_eq!(color_code_to_rgba(0x64)[3], 255);
+    assert_eq!(color_code_to_rgba(0xc9)[3], 255);
+
+    // Semitransparent markers
+    assert_eq!(color_code_to_rgba(0x66)[3], 110);
+    assert_eq!(color_code_to_rgba(0x67)[3], 110);
+    assert_eq!(color_code_to_rgba(0x9e)[3], 110);
+    assert_eq!(color_code_to_rgba(0x68)[3], 110);
+    assert_eq!(color_code_to_rgba(0xca)[3], 110);
+
+    // Invert image test
+    let mut img = RgbaImage::new(2, 2);
+    img.put_pixel(0, 0, Rgba([255, 255, 255, 255])); // white
+    img.put_pixel(1, 0, Rgba([0, 0, 0, 255]));       // black
+    img.put_pixel(0, 1, Rgba([0, 0, 0, 0]));         // transparent
+    img.put_pixel(1, 1, Rgba([100, 150, 200, 110])); // marker
+
+    invert_image(&mut img);
+
+    assert_eq!(img.get_pixel(0, 0), &Rgba([0, 0, 0, 255]));
+    assert_eq!(img.get_pixel(1, 0), &Rgba([255, 255, 255, 255]));
+    assert_eq!(img.get_pixel(0, 1), &Rgba([0, 0, 0, 0])); // transparent unchanged
+    assert_eq!(img.get_pixel(1, 1), &Rgba([155, 105, 55, 110])); // alpha preserved
 }

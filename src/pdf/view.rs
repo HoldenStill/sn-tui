@@ -122,16 +122,40 @@ pub fn render_pdf_page(
             .with_context(|| format!("failed to open companion mark {}", mark_path.display()))?;
         let mark_nb = parse_notebook(&mut mark_file)?;
         if let Some((_, mark_page)) = mark_nb.find_page_by_number(page_number) {
-            let mut overlay = render_page_rgba(&mut mark_file, mark_page, None, true)?;
-            if overlay.width() != base.width() || overlay.height() != base.height() {
-                overlay = imageops::resize(
-                    &overlay,
-                    base.width(),
-                    base.height(),
-                    imageops::FilterType::Triangle,
-                );
-            }
-            imageops::overlay(&mut base, &overlay, 0, 0);
+            let overlay = render_page_rgba(&mut mark_file, mark_page, None, true)?;
+            let canvas_w = mark_page.width;
+            let canvas_h = mark_page.height;
+            let pdf_w = base.width() as f64;
+            let pdf_h = base.height() as f64;
+
+            // Compute uniform scale factor to fit PDF inside device screen canvas:
+            let scale = (canvas_w as f64 / pdf_w).min(canvas_h as f64 / pdf_h);
+            let target_w = (pdf_w * scale).round() as u32;
+            let target_h = (pdf_h * scale).round() as u32;
+
+            let offset_x = (canvas_w.saturating_sub(target_w)) / 2;
+            let offset_y = (canvas_h.saturating_sub(target_h)) / 2;
+
+            let scaled_pdf = if base.width() != target_w || base.height() != target_h {
+                imageops::resize(&base, target_w, target_h, imageops::FilterType::Triangle)
+            } else {
+                base
+            };
+
+            // White letterboxed screen canvas matching physical Supernote display
+            let mut screen = image::RgbaImage::from_pixel(
+                canvas_w,
+                canvas_h,
+                image::Rgba([255, 255, 255, 255]),
+            );
+
+            // Center PDF on screen canvas
+            imageops::overlay(&mut screen, &scaled_pdf, offset_x as i64, offset_y as i64);
+
+            // Overlay .mark annotations natively at (0, 0)
+            imageops::overlay(&mut screen, &overlay, 0, 0);
+
+            base = screen;
         }
     }
 

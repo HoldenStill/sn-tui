@@ -7,7 +7,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui_image::StatefulImage;
 
-use crate::tui::app::{ActiveDoc, App, ExportScope, Modal};
+use crate::tui::app::{ActiveDoc, App, ExportScope, Modal, ViewLayout};
 use crate::tui::tree::EntryKind;
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
@@ -19,18 +19,60 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let main_area = root_chunks[0];
     let status_area = root_chunks[1];
 
-    let panes = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(26),
-            Constraint::Percentage(50),
-            Constraint::Percentage(24),
-        ])
-        .split(main_area);
+    match app.view_layout {
+        ViewLayout::Standard3Pane => {
+            let panes = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(26),
+                    Constraint::Percentage(50),
+                    Constraint::Percentage(24),
+                ])
+                .split(main_area);
 
-    draw_left_tree(frame, app, panes[0]);
-    draw_center_canvas(frame, app, panes[1]);
-    draw_right_inspector(frame, app, panes[2]);
+            draw_left_tree(frame, app, panes[0]);
+            draw_center_canvas(frame, app, panes[1]);
+            draw_right_inspector(frame, app, panes[2]);
+        }
+        ViewLayout::WideReader => {
+            let panes = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(25),
+                    Constraint::Percentage(75),
+                ])
+                .split(main_area);
+
+            draw_left_tree(frame, app, panes[0]);
+            draw_center_canvas(frame, app, panes[1]);
+        }
+        ViewLayout::BottomInspector => {
+            let horiz = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(25),
+                    Constraint::Percentage(75),
+                ])
+                .split(main_area);
+
+            draw_left_tree(frame, app, horiz[0]);
+
+            let right_stack = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Percentage(75),
+                    Constraint::Percentage(25),
+                ])
+                .split(horiz[1]);
+
+            draw_center_canvas(frame, app, right_stack[0]);
+            draw_right_inspector(frame, app, right_stack[1]);
+        }
+        ViewLayout::FullFocus => {
+            draw_center_canvas(frame, app, main_area);
+        }
+    }
+
     draw_status_bar(frame, app, status_area);
 
     match &app.modal {
@@ -143,7 +185,18 @@ fn draw_center_canvas(frame: &mut Frame, app: &mut App, area: Rect) {
         String::new()
     };
     let zoom_badge = if app.zoom > 1.05 {
-        format!(" [{:.0}%]", app.zoom * 100.0)
+        format!(
+            " [Zoom {:.1}x | Pan X:{:.0}% Y:{:.0}% | ↑↓←→ Pan, 0 Reset]",
+            app.zoom,
+            app.pan_x * 100.0,
+            app.pan_y * 100.0
+        )
+    } else {
+        String::new()
+    };
+    let dark_badge = if app.invert_colors { " [Dark]" } else { "" };
+    let layout_badge = if app.view_layout != ViewLayout::Standard3Pane {
+        format!(" [{}]", app.view_layout.label())
     } else {
         String::new()
     };
@@ -159,7 +212,7 @@ fn draw_center_canvas(frame: &mut Frame, app: &mut App, area: Rect) {
     };
 
     let block = Block::default()
-        .title(format!(" {filename}{page_badge}{zoom_badge}{mark_badge} "))
+        .title(format!(" {filename}{page_badge}{zoom_badge}{mark_badge}{dark_badge}{layout_badge} "))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan));
 
@@ -327,6 +380,8 @@ fn draw_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         .as_deref()
         .unwrap_or("no-profile");
     let cache_mb = (app.cache_bytes as f64) / (1024.0 * 1024.0);
+    let layout_name = app.view_layout.label();
+    let dark_str = if app.invert_colors { " | dark:ON" } else { "" };
     let line = Line::from(vec![
         Span::styled(
             format!(" {} ", app.mode_label()),
@@ -336,11 +391,11 @@ fn draw_status_bar(frame: &mut Frame, app: &App, area: Rect) {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::raw(format!(
-            " profile:{profile} | cache:{cache_mb:.1}/{}MB | ",
+            " profile:{profile} | view:{layout_name}{dark_str} | cache:{cache_mb:.1}/{}MB | ",
             app.config.cache_max_mb
         )),
         Span::styled(
-            "j/k:nav  n/p:page  1-5:layers  +/-:zoom  /:search  e:export  s:sync  u:upload  ?:help  q:quit",
+            "v:view  f:focus  i:dark  j/k:nav  ↑↓←→:pan  n/p:page  +/-/0:zoom  e:export  s:sync  u:upload  ?:help  q:quit",
             Style::default().fg(Color::DarkGray),
         ),
     ]);
@@ -450,13 +505,17 @@ fn draw_upload_popup(frame: &mut Frame, state: &crate::tui::app::UploadModalStat
 }
 
 fn draw_help_popup(frame: &mut Frame) {
-    let area = centered_rect(62, 18, frame.area());
+    let area = centered_rect(66, 21, frame.area());
     frame.render_widget(Clear, area);
     let lines = vec![
-        Line::from("j / k, ↓ / ↑   Move selection in library tree"),
-        Line::from("h / l, ← / →   Collapse/expand folder (or pan when zoomed)"),
+        Line::from("j / k          Move selection in library tree (G: end, Home: start)"),
+        Line::from("↑ / ↓ / ← / →  Pan zoomed canvas (or navigate tree/folders when 1.0x)"),
+        Line::from("h / l, Enter   Collapse / expand directory"),
         Line::from("n / p, J / K   Next / previous page"),
         Line::from("g              Jump to page number"),
+        Line::from("v              Cycle layout (3-Pane -> Wide -> Bottom -> Focus)"),
+        Line::from("f              Toggle Full Focus / Fullscreen canvas"),
+        Line::from("i              Toggle Dark / Invert color mode"),
         Line::from("1 – 5          Toggle .note layers (1 toggles PDF .mark overlay)"),
         Line::from("+ / - / 0      Zoom in / zoom out / reset zoom"),
         Line::from("/              Fuzzy search filenames & OCR text"),

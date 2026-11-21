@@ -7,6 +7,15 @@
 - [x] **Milestone 4** (`5fcb75b`): 3-pane Yazi-style TUI (`ratatui` + `ratatui-image`), non-blocking background render worker, Vim keybindings, fuzzy `/` search, and Export/Sync/Upload modals.
 - [x] **Milestone 5** (`2a1354e`): Native Sync engine (Official Private Cloud, Free Supernote Cloud, `allenporter/supernote` Bearer, WebDAV) with pull-only mirror + explicit upload, plus `notify` live filesystem watcher.
 - [x] **Milestone 6** (final): `README.md`, release build (`6.0 MB` stripped LTO), `ldd` audit (links only `libc`, `libm`, `libgcc_s`), `cargo clippy --all-targets -- -D warnings`, and 17/17 passing tests.
+- [x] **Milestone 7** (`00e05d8`): UI Ergonomics, Alternative Layouts & Critical Rendering Fixes:
+  - Decoupled zoom pan (`↑↓←→` in all 4 directions when zoomed) from library navigation (`j`/`k` strictly move file tree, `G` bottom, `Home` top).
+  - Caps Lock harmonization: all action commands (`q`/`Q`, `e`/`E`, `s`/`S`, `u`/`U`, `r`/`R`, `v`/`V`, `f`/`F`, `i`/`I`) are case-insensitive.
+  - 4 View Layouts (`Standard3Pane`, `WideReader`, `BottomInspector`, `FullFocus`) cycled via `v`, instant Full Focus / Fullscreen canvas via `f`/`F` with `Esc` restore.
+  - Dark / Invert color mode (`i`/`I`) for dark terminal environments.
+  - Visual zoom and pan indicator with reset hints on the canvas border.
+  - Letterboxing fix for non-4:3 PDFs (e.g. 16:9 Calculus III lecture slides on 4:3 Manta canvas) in both live preview and lossless PDF export.
+  - Marker/highlighter semitransparency (`0x66`, `0x67`, `0x68`, `0x9e`, `0xca` ~43% opacity) with Porter-Duff source-over alpha blending so highlighters don't black out text.
+  - 22/22 unit and integration tests passing; installed release binary in `~/.local/bin/sn-tui`.
 
 ## Engineering Log
 - **2026-11-17 (Phase 0):** Inspected `RohanGautam/supernote_pdf`, `jya-dev/supernote-tool`, `julianprester/sncloud`, `allenporter/supernote`, and verified crates.io versions (`ratatui 0.30.2`, `ratatui-image 11.1.0`, `crossterm 0.29`, `ureq 3.5`, `lopdf 0.47`). Confirmed Artix host has `rustc 1.99.1`, `pdftoppm`, and `pdfinfo`. Locked in non-`tokio` architecture with `ureq` + bounded `rayon`.
